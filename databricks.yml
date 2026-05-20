@@ -67,7 +67,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -94,7 +94,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -121,7 +121,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -148,7 +148,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -182,7 +182,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -210,7 +210,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
@@ -234,7 +234,7 @@ resources:
       environments:
         - environment_key: lakebase_ops_env
           spec:
-            client: "1"
+            client: "3"
             dependencies:
               - psycopg[binary]>=3.0
               - databricks-sdk>=0.81.0
