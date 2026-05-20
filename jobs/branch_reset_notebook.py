@@ -15,7 +15,14 @@
 import os
 import sys
 
-sys.path.insert(0, "/Workspace/Repos/lakebase-ops")
+try:
+    _notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    if not _notebook_path.startswith("/Workspace/"):
+        _notebook_path = "/Workspace" + _notebook_path
+    _project_root = os.path.dirname(os.path.dirname(_notebook_path))
+except (NameError, AttributeError):
+    _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
 os.environ.setdefault("OPS_CATALOG", "ops_catalog")
 os.environ.setdefault("OPS_SCHEMA", "lakebase_ops")
 
