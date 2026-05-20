@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -95,7 +96,8 @@ class LakebaseClient:
         Get a database connection to a Lakebase branch.
         Handles OAuth refresh transparently.
         """
-        endpoint_name = f"projects/{project_id}/branches/{branch_id}/endpoints/default"
+        endpoint_id = os.getenv("LAKEBASE_ENDPOINT_NAME", "primary")
+        endpoint_name = f"projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}"
         conn_key = f"{project_id}/{branch_id}"
 
         if conn_key in self._connections:
@@ -119,7 +121,7 @@ class LakebaseClient:
                 host=endpoint.status.hosts.host,
                 port=5432,
                 dbname="databricks_postgres",
-                user="databricks",
+                user=os.getenv("LAKEBASE_PG_USER", "databricks"),
                 password=token,
                 sslmode="require",
                 options="-c statement_timeout=300000",
