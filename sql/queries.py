@@ -46,9 +46,9 @@ UNUSED_INDEXES = """
 """
 
 BLOATED_INDEXES = """
-    SELECT schemaname, relname AS table_name, indexrelname AS index_name,
-           idx_scan, idx_tup_read, index_size_bytes
-    FROM pg_stat_user_indexes
+    SELECT s.schemaname, s.relname AS table_name, s.indexrelname AS index_name,
+           s.idx_scan, s.idx_tup_read, pg_relation_size(s.indexrelid) AS index_size_bytes
+    FROM pg_stat_user_indexes s
 """
 
 MISSING_INDEXES = """

@@ -54,12 +54,22 @@ agent = HealthAgent(lakebase_client, delta_writer, alert_manager)
 
 # Identify cold data
 cold = agent.identify_cold_data(project_id=project_id, branch_id=branch_id, cold_threshold_days=cold_days)
-print(f"Cold tables found: {len(cold.get('tables', []))}")
+candidates = cold.get("candidates", [])
+print(f"Cold tables found: {len(candidates)}")
 
 # COMMAND ----------
 
-# Archive cold data to Delta
-result = agent.archive_cold_data_to_delta(project_id=project_id, branch_id=branch_id, threshold_days=cold_days)
-print(f"Archival: {result.get('status', 'unknown')}")
-print(f"Rows archived: {result.get('rows_archived', 0)}")
-print(f"Bytes reclaimed: {result.get('bytes_reclaimed', 0)}")
+# Archive cold data to Delta — `archive_cold_data_to_delta` operates per table.
+total_archived = 0
+for candidate in candidates:
+    table = candidate.get("table")
+    if not table:
+        continue
+    try:
+        result = agent.archive_cold_data_to_delta(project_id=project_id, branch_id=branch_id, table=table)
+        rows = result.get("rows_archived", 0)
+        total_archived += rows
+        print(f"  {table}: {result.get('status','unknown')} rows_archived={rows}")
+    except Exception as exc:
+        print(f"  {table}: archive_failed err={exc}")
+print(f"Total rows archived: {total_archived}")

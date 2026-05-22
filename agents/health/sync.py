@@ -164,21 +164,37 @@ class SyncMixin:
 
         results = []
         for pair in pairs:
-            completeness = self.validate_sync_completeness(
-                project_id,
-                branch_id,
-                pair["source"],
-                pair["target"],
-                pair.get("ts_col", "updated_at"),
-            )
-            integrity = self.validate_sync_integrity(
-                project_id,
-                branch_id,
-                pair["source"],
-                pair["target"],
-            )
-            # GAP-036: Also check via Synced Tables API
-            api_status = self.get_synced_table_api_status(pair["source"])
+            try:
+                completeness = self.validate_sync_completeness(
+                    project_id,
+                    branch_id,
+                    pair["source"],
+                    pair["target"],
+                    pair.get("ts_col", "updated_at"),
+                )
+                integrity = self.validate_sync_integrity(
+                    project_id,
+                    branch_id,
+                    pair["source"],
+                    pair["target"],
+                )
+                # GAP-036: Also check via Synced Tables API
+                api_status = self.get_synced_table_api_status(pair["source"])
+            except Exception as exc:
+                # Source table absent or unreadable — common on freshly provisioned
+                # Lakebase projects that haven't been seeded with these demo tables.
+                # Record as a `missing_source` outcome rather than failing the whole run.
+                logger.warning(f"sync validation skipped for {pair['source']}: {exc}")
+                results.append(
+                    {
+                        "source": pair["source"],
+                        "target": pair["target"],
+                        "completeness": {"status": "missing_source", "error": str(exc)[:200]},
+                        "integrity": {"status": "missing_source"},
+                        "api_status": {"status": "unknown"},
+                    }
+                )
+                continue
             results.append(
                 {
                     "source": pair["source"],
