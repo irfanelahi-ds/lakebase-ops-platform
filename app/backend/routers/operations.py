@@ -28,6 +28,9 @@ def vacuum_history(
     safe_limit = int(limit)
 
     def fetch():
+        # Databricks SQL rejects parameter markers inside INTERVAL clauses.
+        # All three values are int-cast and FastAPI-validated, so direct
+        # interpolation is safe.
         sql = f"""
         SELECT DATE(executed_at) AS vacuum_date, operation_type,
                COUNT(*) AS operations,
@@ -35,19 +38,12 @@ def vacuum_history(
                COUNT(CASE WHEN status = 'failed' THEN 1 END) AS failed,
                ROUND(AVG(duration_seconds), 2) AS avg_duration_s
         FROM {fqn("vacuum_history")}
-        WHERE executed_at > CURRENT_TIMESTAMP - INTERVAL :days DAYS
+        WHERE executed_at > CURRENT_TIMESTAMP - INTERVAL {safe_days} DAYS
         GROUP BY DATE(executed_at), operation_type
         ORDER BY vacuum_date DESC
-        LIMIT :row_limit OFFSET :row_offset
+        LIMIT {safe_limit} OFFSET {safe_offset}
         """
-        return execute_query(
-            sql,
-            parameters=[
-                {"name": "days", "value": safe_days, "type": "INT"},
-                {"name": "row_limit", "value": safe_limit, "type": "INT"},
-                {"name": "row_offset", "value": safe_offset, "type": "INT"},
-            ],
-        )
+        return execute_query(sql)
 
     return get_cached(f"vacuum_{safe_days}_{safe_offset}_{safe_limit}", fetch, ttl=300)
 

@@ -18,6 +18,10 @@ def slow_queries(
     safe_limit = int(limit)
 
     def fetch():
+        # Databricks SQL rejects parameter markers inside INTERVAL clauses
+        # (UNEXPECTED_USE_OF_PARAMETER_MARKER). `safe_hours`/`safe_limit` are
+        # already int-cast and range-validated by FastAPI Query, so direct
+        # interpolation is safe.
         sql = f"""
         SELECT query, queryid,
                SUM(calls) AS total_calls,
@@ -27,18 +31,12 @@ def slow_queries(
                ROUND(SUM(shared_blks_read) * 8.0 / 1024, 2) AS total_read_mb,
                MAX(snapshot_timestamp) AS last_seen
         FROM {fqn("pg_stat_history")}
-        WHERE snapshot_timestamp > CURRENT_TIMESTAMP - INTERVAL :hours HOURS
+        WHERE snapshot_timestamp > CURRENT_TIMESTAMP - INTERVAL {safe_hours} HOURS
         GROUP BY query, queryid
         ORDER BY total_time_ms DESC
-        LIMIT :row_limit
+        LIMIT {safe_limit}
         """
-        return execute_query(
-            sql,
-            parameters=[
-                {"name": "hours", "value": safe_hours, "type": "INT"},
-                {"name": "row_limit", "value": safe_limit, "type": "INT"},
-            ],
-        )
+        return execute_query(sql)
 
     return get_cached(f"slow_queries_{safe_hours}_{safe_limit}", fetch, ttl=60)
 

@@ -73,6 +73,9 @@ def metrics_trends(
     safe_hours = int(hours)
 
     def fetch():
+        # Databricks SQL rejects parameter markers inside INTERVAL clauses.
+        # `safe_hours` is int-cast and `metric` is whitelisted, so direct
+        # interpolation of the hours value is safe; metric_name stays bound.
         sql = f"""
         SELECT metric_name,
                DATE_TRUNC('hour', snapshot_timestamp) AS hour,
@@ -80,7 +83,7 @@ def metrics_trends(
                ROUND(MIN(metric_value), 4) AS min_value,
                ROUND(MAX(metric_value), 4) AS max_value
         FROM {fqn("lakebase_metrics")}
-        WHERE snapshot_timestamp > CURRENT_TIMESTAMP - INTERVAL :hours HOURS
+        WHERE snapshot_timestamp > CURRENT_TIMESTAMP - INTERVAL {safe_hours} HOURS
           AND metric_name = :metric_name
         GROUP BY metric_name, DATE_TRUNC('hour', snapshot_timestamp)
         ORDER BY hour
@@ -88,7 +91,6 @@ def metrics_trends(
         return execute_query(
             sql,
             parameters=[
-                {"name": "hours", "value": safe_hours, "type": "INT"},
                 {"name": "metric_name", "value": metric, "type": "STRING"},
             ],
         )
