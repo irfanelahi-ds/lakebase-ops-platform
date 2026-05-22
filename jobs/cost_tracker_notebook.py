@@ -46,9 +46,11 @@ delta_writer = DeltaWriter(mock_mode=False)
 alert_manager = AlertManager(mock_mode=False)
 agent = HealthAgent(lakebase_client, delta_writer, alert_manager)
 
+project_id = dbutils.widgets.get("project_id") if "dbutils" in dir() else settings.LAKEBASE_PROJECT_ID
+
 # COMMAND ----------
 
-result = agent.track_cost_attribution()
+result = agent.track_cost_attribution(project_id=project_id)
 print(f"Cost tracking: {result.get('status', 'unknown')}")
 print(f"Total DBUs: {result.get('total_dbus', 0)}")
 print(f"Estimated cost: ${result.get('estimated_cost_usd', 0):.2f}")

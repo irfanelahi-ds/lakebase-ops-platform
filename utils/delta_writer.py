@@ -364,6 +364,11 @@ class DeltaWriter:
         if self.sql_api_mode:
             return self._write_via_sql_api(table_name, records, mode)
 
+        if not records:
+            # Spark cannot infer schema from an empty Row list. Skip the write
+            # cleanly — equivalent to the SQL-API path's `no_records` short-circuit.
+            return {"table": table_name, "records_written": 0, "status": "no_records"}
+
         from pyspark.sql import Row
 
         rows = [Row(**r) for r in records]

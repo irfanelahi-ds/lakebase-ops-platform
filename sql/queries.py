@@ -36,8 +36,8 @@ PG_STAT_STATEMENTS_SLOW = """
 # =============================================================================
 
 UNUSED_INDEXES = """
-    SELECT schemaname, relname AS table_name, indexrelname AS index_name,
-           idx_scan, pg_relation_size(indexrelid) AS index_size_bytes
+    SELECT s.schemaname, s.relname AS table_name, s.indexrelname AS index_name,
+           s.idx_scan, pg_relation_size(s.indexrelid) AS index_size_bytes
     FROM pg_stat_user_indexes s
     JOIN pg_index i ON s.indexrelid = i.indexrelid
     WHERE s.idx_scan = 0

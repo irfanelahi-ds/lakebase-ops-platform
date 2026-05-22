@@ -53,7 +53,7 @@ agent = HealthAgent(lakebase_client, delta_writer, alert_manager)
 # COMMAND ----------
 
 # Identify cold data
-cold = agent.identify_cold_data(project_id=project_id, branch_id=branch_id, threshold_days=cold_days)
+cold = agent.identify_cold_data(project_id=project_id, branch_id=branch_id, cold_threshold_days=cold_days)
 print(f"Cold tables found: {len(cold.get('tables', []))}")
 
 # COMMAND ----------
