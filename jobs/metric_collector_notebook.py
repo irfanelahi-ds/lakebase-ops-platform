@@ -16,8 +16,16 @@ try:
 except (NameError, AttributeError):
     _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
+try:
+    for _key in ("OPS_CATALOG", "OPS_SCHEMA", "ARCHIVE_SCHEMA"):
+        _val = dbutils.widgets.get(_key)
+        if _val:
+            os.environ[_key] = _val
+except Exception:
+    pass
 os.environ.setdefault("OPS_CATALOG", "ops_catalog")
 os.environ.setdefault("OPS_SCHEMA", "lakebase_ops")
+os.environ.setdefault("ARCHIVE_SCHEMA", "lakebase_archive")
 
 # COMMAND ----------
 
@@ -36,6 +44,19 @@ delta_writer = DeltaWriter(mock_mode=False)
 alert_manager = AlertManager(mock_mode=False)
 perf = PerformanceAgent(lakebase_client, delta_writer, alert_manager)
 health = HealthAgent(lakebase_client, delta_writer, alert_manager)
+
+# COMMAND ----------
+
+# Ensure required PostgreSQL extensions exist on each branch. Fresh Lakebase
+# Autoscaling projects do not pre-install pg_stat_statements; the read below
+# would fail with UndefinedTable without this bootstrap.
+for branch in branches:
+    ext_result = lakebase_client.ensure_extensions(
+        project_id=project_id,
+        branch_id=branch.strip(),
+        extensions=["pg_stat_statements"],
+    )
+    print(f"extensions [{branch}]: {ext_result}")
 
 # COMMAND ----------
 

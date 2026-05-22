@@ -121,7 +121,7 @@ class LakebaseClient:
                 host=endpoint.status.hosts.host,
                 port=5432,
                 dbname="databricks_postgres",
-                user=os.getenv("LAKEBASE_PG_USER", "databricks"),
+                user=os.getenv("LAKEBASE_DB_USER", "databricks"),
                 password=token,
                 sslmode="require",
                 options="-c statement_timeout=300000",
@@ -161,6 +161,32 @@ class LakebaseClient:
             cur.execute(statement, params)
             conn.commit()
             return cur.rowcount
+
+    def ensure_extensions(self, project_id: str, branch_id: str, extensions: list[str]) -> dict[str, bool]:
+        """Idempotently create the given PostgreSQL extensions on a branch.
+
+        Returns a map of extension_name -> True if the extension exists after the
+        call (whether pre-existing or just created), False if creation failed.
+        """
+        if self.mock_mode:
+            return {ext: True for ext in extensions}
+
+        results: dict[str, bool] = {}
+        for ext in extensions:
+            # Extension names are PostgreSQL identifiers; reject anything that
+            # isn't a plain identifier so we don't smuggle a SQL fragment into
+            # a non-parameterizable DDL position.
+            if not ext.replace("_", "").isalnum():
+                logger.error(f"Refusing to create extension with non-identifier name: {ext!r}")
+                results[ext] = False
+                continue
+            try:
+                self.execute_statement(project_id, branch_id, f'CREATE EXTENSION IF NOT EXISTS "{ext}"')
+                results[ext] = True
+            except Exception as e:
+                logger.error(f"Failed to ensure extension {ext} on branch {branch_id}: {e}")
+                results[ext] = False
+        return results
 
     # --- Lakebase Project/Branch Management ---
 

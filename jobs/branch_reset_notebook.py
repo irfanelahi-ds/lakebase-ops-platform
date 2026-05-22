@@ -23,8 +23,16 @@ try:
 except (NameError, AttributeError):
     _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
+try:
+    for _key in ("OPS_CATALOG", "OPS_SCHEMA", "ARCHIVE_SCHEMA"):
+        _val = dbutils.widgets.get(_key)
+        if _val:
+            os.environ[_key] = _val
+except Exception:
+    pass
 os.environ.setdefault("OPS_CATALOG", "ops_catalog")
 os.environ.setdefault("OPS_SCHEMA", "lakebase_ops")
+os.environ.setdefault("ARCHIVE_SCHEMA", "lakebase_archive")
 
 # COMMAND ----------
 

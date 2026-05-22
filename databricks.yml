@@ -27,6 +27,15 @@ variables:
   notification_email:
     description: "Email for job failure notifications"
     default: ""
+  branches:
+    description: "Comma-separated branch list used by branch-aware jobs (e.g. metric_collector). Fresh Lakebase Autoscaling projects have only `production`."
+    default: "production"
+  default_branch:
+    description: "Single branch id used by single-branch jobs (index_analyzer, vacuum_scheduler, sync_validator, cold_archiver)."
+    default: "production"
+  cold_threshold_days:
+    description: "Age threshold in days for cold_archiver to archive table partitions."
+    default: "90"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/lakebase-ops-platform
@@ -61,8 +70,11 @@ resources:
           notebook_task:
             notebook_path: ./jobs/metric_collector_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
-              branches: "production,staging"
+              branches: ${var.branches}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
@@ -88,8 +100,11 @@ resources:
           notebook_task:
             notebook_path: ./jobs/index_analyzer_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
-              branch_id: "production"
+              branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
@@ -115,8 +130,11 @@ resources:
           notebook_task:
             notebook_path: ./jobs/vacuum_scheduler_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
-              branch_id: "production"
+              branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
@@ -142,8 +160,11 @@ resources:
           notebook_task:
             notebook_path: ./jobs/sync_validator_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
-              branch_id: "production"
+              branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
@@ -169,12 +190,20 @@ resources:
           notebook_task:
             notebook_path: ./jobs/branch_manager_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
+              project_id: ${var.project_id}
               action: "enforce_ttl"
           environment_key: lakebase_ops_env
         - task_key: reset_staging
           notebook_task:
             notebook_path: ./jobs/branch_manager_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
+              project_id: ${var.project_id}
               action: "reset_staging"
           environment_key: lakebase_ops_env
           depends_on:
@@ -203,9 +232,12 @@ resources:
           notebook_task:
             notebook_path: ./jobs/cold_archiver_notebook.py
             base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
-              branch_id: "production"
-              cold_threshold_days: "90"
+              branch_id: ${var.default_branch}
+              cold_threshold_days: ${var.cold_threshold_days}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
@@ -230,6 +262,11 @@ resources:
         - task_key: track_costs
           notebook_task:
             notebook_path: ./jobs/cost_tracker_notebook.py
+            base_parameters:
+              OPS_CATALOG: ${var.ops_catalog}
+              OPS_SCHEMA: ${var.ops_schema}
+              ARCHIVE_SCHEMA: ${var.archive_schema}
+              project_id: ${var.project_id}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
