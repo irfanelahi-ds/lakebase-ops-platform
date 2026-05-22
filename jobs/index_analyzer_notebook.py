@@ -18,7 +18,7 @@ except (NameError, AttributeError):
 sys.path.insert(0, _project_root)
 try:
     # Direct widget -> env-var-of-same-name mapping
-    for _key in ("OPS_CATALOG", "OPS_SCHEMA", "ARCHIVE_SCHEMA"):
+    for _key in ("OPS_CATALOG", "OPS_SCHEMA", "ARCHIVE_SCHEMA", "LAKEBASE_DB_USER"):
         _val = dbutils.widgets.get(_key)
         if _val:
             os.environ[_key] = _val

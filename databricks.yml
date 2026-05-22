@@ -36,6 +36,9 @@ variables:
   cold_threshold_days:
     description: "Age threshold in days for cold_archiver to archive table partitions."
     default: "90"
+  db_user:
+    description: "PostgreSQL role name used by jobs to authenticate to Lakebase. Lakebase OAuth requires `user=` to match the deployer's `postgres_role` — for user identities this is the email address (e.g. `firstname.lastname@example.com`); for service principals it's the SP UUID or a custom-created role name."
+    default: "databricks"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/lakebase-ops-platform
@@ -74,6 +77,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               branches: ${var.branches}
           environment_key: lakebase_ops_env
       environments:
@@ -104,6 +108,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
@@ -134,6 +139,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
@@ -164,6 +170,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               branch_id: ${var.default_branch}
           environment_key: lakebase_ops_env
       environments:
@@ -194,6 +201,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               action: "enforce_ttl"
           environment_key: lakebase_ops_env
         - task_key: reset_staging
@@ -204,6 +212,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               action: "reset_staging"
           environment_key: lakebase_ops_env
           depends_on:
@@ -236,6 +245,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
               branch_id: ${var.default_branch}
               cold_threshold_days: ${var.cold_threshold_days}
           environment_key: lakebase_ops_env
@@ -267,6 +277,7 @@ resources:
               OPS_SCHEMA: ${var.ops_schema}
               ARCHIVE_SCHEMA: ${var.archive_schema}
               project_id: ${var.project_id}
+              LAKEBASE_DB_USER: ${var.db_user}
           environment_key: lakebase_ops_env
       environments:
         - environment_key: lakebase_ops_env
