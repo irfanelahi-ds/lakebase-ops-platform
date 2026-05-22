@@ -24,10 +24,16 @@ except (NameError, AttributeError):
     _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
 try:
+    # Direct widget -> env-var-of-same-name mapping
     for _key in ("OPS_CATALOG", "OPS_SCHEMA", "ARCHIVE_SCHEMA"):
         _val = dbutils.widgets.get(_key)
         if _val:
             os.environ[_key] = _val
+    # `project_id` widget feeds LAKEBASE_PROJECT_ID, which `config.settings`
+    # reads at import time. Set this before any `from config import settings`.
+    _pid = dbutils.widgets.get("project_id")
+    if _pid:
+        os.environ["LAKEBASE_PROJECT_ID"] = _pid
 except Exception:
     pass
 os.environ.setdefault("OPS_CATALOG", "ops_catalog")
