@@ -38,6 +38,8 @@ class MonitoringMixin:
             metrics["cache_hit_ratio"] = blks_hit / total_blks if total_blks > 0 else 1.0
             metrics["deadlocks"] = stats.get("deadlocks", 0)
             metrics["active_connections"] = stats.get("numbackends", 0)
+            metrics["temp_files"] = stats.get("temp_files", 0)
+            metrics["temp_bytes"] = stats.get("temp_bytes", 0)
 
         # 2. Connection details
         activity = self.client.execute_query(project_id, branch_id, queries.CONNECTION_STATES)
@@ -86,7 +88,7 @@ class MonitoringMixin:
         wal_stats = self.client.execute_query(project_id, branch_id, queries.WAL_STATS)
         if wal_stats:
             wal = wal_stats[0]
-            metrics["wal_bytes_generated"] = wal.get("wal_bytes", 0)
+            metrics["wal_bytes"] = wal.get("wal_bytes", 0)
             metrics["wal_buffers_full"] = wal.get("wal_buffers_full", 0)
             metrics["wal_write_time_ms"] = wal.get("wal_write_time", 0.0)
 
