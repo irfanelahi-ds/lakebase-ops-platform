@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from framework.agent_framework import EventType
 from sql import queries
@@ -92,7 +93,9 @@ class MonitoringMixin:
             metrics["wal_buffers_full"] = wal.get("wal_buffers_full", 0)
             metrics["wal_write_time_ms"] = wal.get("wal_write_time", 0.0)
 
-        # Persist all metrics to Delta
+        # Persist all metrics to Delta. Include Decimal — psycopg returns
+        # PostgreSQL `numeric` columns as Decimal (e.g. pg_stat_wal.wal_bytes),
+        # so omitting it silently dropped large counter metrics.
         now = datetime.now(UTC).isoformat()
         records = [
             {
@@ -100,12 +103,12 @@ class MonitoringMixin:
                 "project_id": project_id,
                 "branch_id": branch_id,
                 "metric_name": name,
-                "metric_value": float(value) if isinstance(value, (int, float)) else 0.0,
+                "metric_value": float(value) if isinstance(value, (int, float, Decimal)) else 0.0,
                 "threshold_level": "normal",
                 "snapshot_timestamp": now,
             }
             for name, value in metrics.items()
-            if isinstance(value, (int, float))
+            if isinstance(value, (int, float, Decimal))
         ]
 
         self.writer.write_metrics("lakebase_metrics", records)
