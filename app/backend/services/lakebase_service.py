@@ -9,8 +9,22 @@ logger = logging.getLogger("lakebase_ops_app.lakebase")
 PROJECT_ID = os.getenv("LAKEBASE_PROJECT_ID", "")
 ENDPOINT_HOST = os.getenv("LAKEBASE_ENDPOINT_HOST", "")
 LAKEBASE_ENDPOINT_NAME = os.getenv("LAKEBASE_ENDPOINT_NAME", "")
+LAKEBASE_DEFAULT_BRANCH = os.getenv("LAKEBASE_DEFAULT_BRANCH", "production")
 
 _credential_cache: dict = {"token": None, "user": None, "timestamp": 0.0}
+
+
+def _endpoint_full_name() -> str:
+    """Build the full Postgres endpoint resource name expected by the credential APIs.
+
+    Both `/api/2.0/postgres/credentials` and
+    `client.postgres.generate_database_credential()` require the full path
+    `projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}`, not
+    just the endpoint's short name.
+    """
+    if not (PROJECT_ID and LAKEBASE_DEFAULT_BRANCH and LAKEBASE_ENDPOINT_NAME):
+        return ""
+    return f"projects/{PROJECT_ID}/branches/{LAKEBASE_DEFAULT_BRANCH}/endpoints/{LAKEBASE_ENDPOINT_NAME}"
 
 
 def _get_db_credential() -> tuple:
@@ -19,78 +33,68 @@ def _get_db_credential() -> tuple:
     if _credential_cache["token"] and (now - _credential_cache["timestamp"]) < 3000:
         return _credential_cache["token"], _credential_cache["user"]
 
+    # The PG role name is always LAKEBASE_DB_USER — the credential APIs return
+    # only a token, not a role, so the caller has to know which role they
+    # authenticate as. For a Databricks App that's the SP's `postgres_role`
+    # (typically the SP's UUID); set in app.yaml per deployment.
+    user = os.getenv("LAKEBASE_DB_USER", "databricks")
+
     # Method 1: Explicit env var override (highest priority when set in app.yaml)
     token = os.getenv("LAKEBASE_OAUTH_TOKEN", "")
-    user = os.getenv("LAKEBASE_DB_USER", "databricks")
     if token:
         logger.info("Using LAKEBASE_OAUTH_TOKEN env var (explicit override)")
         _credential_cache.update({"token": token, "user": user, "timestamp": now})
         return token, user
 
-    # Method 2: Autoscaling Lakebase credential API (/api/2.0/postgres/credentials)
-    if LAKEBASE_ENDPOINT_NAME:
-        try:
-            from databricks.sdk import WorkspaceClient
+    endpoint_full = _endpoint_full_name()
+    if not endpoint_full:
+        logger.warning(
+            "Cannot build endpoint path — set LAKEBASE_PROJECT_ID, LAKEBASE_DEFAULT_BRANCH, and LAKEBASE_ENDPOINT_NAME"
+        )
+        return "", user
 
-            client = WorkspaceClient()
-            resp = client.api_client.do(
-                "POST",
-                "/api/2.0/postgres/credentials",
-                body={"endpoint": LAKEBASE_ENDPOINT_NAME},
-            )
-            token = resp.get("token", "")
-            if token:
-                me = client.current_user.me()
-                user = me.user_name if me and me.user_name else "databricks"
-                logger.info("Credential obtained via Autoscaling postgres/credentials API")
-                _credential_cache.update({"token": token, "user": user, "timestamp": now})
-                return token, user
-        except Exception as e:
-            logger.warning(f"Autoscaling credentials API failed: {e}")
-
-    # Method 3: Provisioned Lakebase credential API (legacy)
-    if PROJECT_ID:
-        try:
-            from databricks.sdk import WorkspaceClient
-
-            client = WorkspaceClient()
-            resp = client.api_client.do(
-                "POST",
-                "/api/2.0/lakebase/credentials/generate-db-credential",
-                body={"project_id": PROJECT_ID},
-            )
-            token = resp.get("credential", {}).get("password", "")
-            user = resp.get("credential", {}).get("username", "databricks")
-            if token:
-                logger.info("Credential obtained via Provisioned generate-db-credential API")
-                _credential_cache.update({"token": token, "user": user, "timestamp": now})
-                return token, user
-        except Exception as e:
-            logger.warning(f"Provisioned credentials API failed: {e}")
-
-    # Method 4: Generate credential via public SDK postgres API
-    # (Replaces private attribute access — uses only public SDK methods)
+    # Method 2: Public SDK postgres.generate_database_credential() — preferred
+    # because it's the supported public interface.
     try:
         from databricks.sdk import WorkspaceClient
 
         client = WorkspaceClient()
-        cred = client.postgres.generate_database_credential()
-        token = getattr(cred, "password", "") or getattr(cred, "token", "")
-        user = getattr(cred, "username", "databricks") or "databricks"
+        cred = client.postgres.generate_database_credential(endpoint=endpoint_full)
+        # The response field is `token`, not `password` (`getattr` fallback in
+        # case future SDK versions add `.password`).
+        token = getattr(cred, "token", "") or getattr(cred, "password", "")
         if token:
-            logger.info("Credential obtained via public SDK postgres.generate_database_credential()")
+            logger.info("Credential obtained via SDK postgres.generate_database_credential()")
             _credential_cache.update({"token": token, "user": user, "timestamp": now})
             return token, user
-        else:
-            logger.warning("Public SDK postgres credential returned empty token")
+        logger.warning("SDK postgres.generate_database_credential() returned empty token")
     except AttributeError:
         logger.warning(
             "SDK does not have postgres.generate_database_credential() — upgrade databricks-sdk to >= 0.81.0"
         )
     except Exception as e:
-        logger.warning(f"Public SDK postgres credential failed: {e}")
+        logger.warning(f"SDK postgres credential failed: {e}")
 
-    return "", "databricks"
+    # Method 3: Raw REST call to /api/2.0/postgres/credentials — fallback for
+    # SDK versions that lack the typed method.
+    try:
+        from databricks.sdk import WorkspaceClient
+
+        client = WorkspaceClient()
+        resp = client.api_client.do(
+            "POST",
+            "/api/2.0/postgres/credentials",
+            body={"endpoint": endpoint_full},
+        )
+        token = resp.get("token", "")
+        if token:
+            logger.info("Credential obtained via /api/2.0/postgres/credentials REST call")
+            _credential_cache.update({"token": token, "user": user, "timestamp": now})
+            return token, user
+    except Exception as e:
+        logger.warning(f"REST postgres credentials API failed: {e}")
+
+    return "", user
 
 
 def get_realtime_stats() -> dict:
