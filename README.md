@@ -85,10 +85,11 @@ Agents communicate via an event bus — e.g., when Provisioning creates a new br
 ### Databricks Requirements
 
 - A Databricks workspace with [Lakebase](https://docs.databricks.com/en/lakebase/index.html) enabled
-- A Lakebase project with at least one branch (typically `main`)
+- A Lakebase project with at least one branch (Lakebase Autoscaling provisions `production` by default)
 - A SQL Warehouse (serverless recommended)
 - A Unity Catalog with a catalog for operational data (default: `ops_catalog`)
 - A [Service Principal](https://docs.databricks.com/en/admin/users-groups/service-principals.html) for the Databricks App (auto-created by `databricks apps deploy`)
+- A Postgres role on the Lakebase project's `production` branch for both the deployer's identity (used by job runs) and the app's service principal (used by the app's direct-PG queries on the Live Stats page). Lakebase OAuth requires the `psycopg.connect(user=...)` value to match the authenticated identity's `postgres_role`; for user identities that's the email address, for service principals it's the SP UUID or a custom-created role name.
 
 ---
 
@@ -179,11 +180,12 @@ The app deploys to port **8000** (Databricks Apps proxy forwards to this port).
 
 **Step 5: Configure the service principal**
 
-After the app deploys, Databricks creates a service principal. Grant it:
-- `USE CATALOG` on your ops catalog
-- `USE SCHEMA` on the ops schema
-- `SELECT` on all operational tables
-- Lakebase project access (for live PG metrics)
+After the app deploys, Databricks creates a service principal. The app's pages
+issue queries through your SQL warehouse, render counts of recent job runs, and
+expose a "Sync Tables in UC Schema" button that triggers all 7 jobs — so the SP
+needs three distinct permission grants:
+
+1. Unity Catalog access for reading operational Delta tables:
 
 ```sql
 -- Run in a SQL editor
@@ -191,6 +193,56 @@ GRANT USE CATALOG ON CATALOG ops_catalog TO `<service-principal-app-id>`;
 GRANT USE SCHEMA ON SCHEMA ops_catalog.lakebase_ops TO `<service-principal-app-id>`;
 GRANT SELECT ON SCHEMA ops_catalog.lakebase_ops TO `<service-principal-app-id>`;
 ```
+
+2. SQL warehouse `CAN_USE` — without this, all Statement Execution API calls
+   from the app silently fail and every Delta-backed page (Dashboard,
+   Performance, Indexes, Operations) shows zeros or empty state:
+
+```bash
+databricks permissions update warehouses <warehouse-id> --json '{
+  "access_control_list": [
+    {"service_principal_name": "<service-principal-app-id>", "permission_level": "CAN_USE"}
+  ]
+}'
+```
+
+3. `CAN_MANAGE_RUN` on each of the 7 deployed jobs — required for the in-app
+   "Sync Tables in UC Schema" button:
+
+```bash
+for JID in <job_id_1> <job_id_2> ... <job_id_7>; do
+  databricks permissions update jobs $JID --json '{
+    "access_control_list": [
+      {"service_principal_name": "<service-principal-app-id>", "permission_level": "CAN_MANAGE_RUN"}
+    ]
+  }'
+done
+```
+
+Get the job IDs after `databricks bundle deploy` via
+`databricks bundle summary -t <target>`.
+
+4. Lakebase Postgres role on the `production` branch — for the Live Stats
+   page's direct PG connection. The role's `postgres_role` value must equal
+   the SP's UUID (the default identity), or a custom name set as the
+   `LAKEBASE_DB_USER` env var in `app/app.yaml`:
+
+```bash
+databricks postgres create-role "projects/<project-id>/branches/production" \
+  --json '{
+    "name": "app-sp",
+    "status": {
+      "identity_type": "SERVICE_PRINCIPAL",
+      "auth_method": "LAKEBASE_OAUTH_V1",
+      "postgres_role": "<service-principal-app-id>"
+    }
+  }'
+```
+
+Then in the same branch, grant the role read access to whichever Postgres
+objects the Live Stats page should be able to query (typically `SELECT` on
+the user schemas; system views like `pg_stat_database` are readable by
+default).
 
 ### Option 2: Manual Deployment
 
@@ -391,10 +443,33 @@ Copy `.env.example` to `.env` and configure. Key variables:
 | `OPS_CATALOG` | No | Unity Catalog name (default: `ops_catalog`) |
 | `OPS_SCHEMA` | No | Schema name (default: `lakebase_ops`) |
 | `LAKEBASE_JOB_IDS` | No | JSON map of job names to IDs (set after deploying jobs) |
+| `LAKEBASE_DB_USER` | No | Postgres role name the app authenticates as. Defaults to `databricks`; override to the SP UUID (or custom PG role name) for non-FEVM deployments. |
+| `LAKEBASE_ENDPOINT_NAME` | No | Endpoint name for Lakebase Autoscaling — typically `primary` for fresh projects (defaults to `primary` when unset). |
 | `CORS_ORIGINS` | No | Allowed CORS origins for the app |
 | `LAKEBASE_LOCAL_DEV` | No | Set to `true` to skip auth middleware locally |
 
 See `.env.example` for the complete list with descriptions.
+
+### Bundle Variables (`databricks.yml`)
+
+The asset bundle exposes a set of variables you can override per-target or via
+`--var name=value`. These propagate as job task `base_parameters` (and therefore
+as notebook widgets / env vars) to every scheduled job, so deployer-side
+overrides reach the agent code without notebook edits:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `project_id` | `""` | Lakebase project ID (the string identifier, e.g. `irfan-lakebase-ops`, **not** the UUID). Used by every job and by the app to talk to the Postgres / Lakebase APIs. |
+| `endpoint_host` | `""` | Lakebase PG endpoint hostname (used by the app for direct PG connections). |
+| `ops_catalog` | `"ops_catalog"` | Unity Catalog catalog for operational Delta tables. |
+| `ops_schema` | `"lakebase_ops"` | Schema for operational Delta tables. |
+| `archive_schema` | `"lakebase_archive"` | Schema for archived cold data. |
+| `warehouse_id` | `""` | SQL Warehouse ID for DDL/DML execution. |
+| `notification_email` | `""` | Email for job failure notifications. |
+| `branches` | `"production"` | Comma-separated branch list for branch-aware jobs (e.g. Metric Collector). Fresh Lakebase Autoscaling projects only have `production` by default. |
+| `default_branch` | `"production"` | Single branch id for single-branch jobs (Index Analyzer, Vacuum Scheduler, Sync Validator, Cold Archiver). |
+| `cold_threshold_days` | `"90"` | Age threshold in days for the Cold Archiver to flag partitions as cold. |
+| `db_user` | `"databricks"` | Postgres role name jobs authenticate as. Override to the deployer's PG role on the Lakebase project — for user identities that's the email address; for service principals it's the SP UUID or a custom-created role name. |
 
 ### Alert Thresholds
 
